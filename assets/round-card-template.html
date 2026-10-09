@@ -1,0 +1,90 @@
+<!--
+穷追式提问 · 单轮问卷引擎（data-driven）
+整份问卷由脚本一次 innerHTML 构建：数据写全前不渲染，写好那一刻整卡原子出现，
+即「先完整生成、再一次性推送」，不会边渲染边生成。
+用法：从 id=groot 的根 div 起原样复制，只改标了「只改这里」的 ROUND 与 QUESTIONS，别改写引擎。
+不要包 doctype/html/head/body；show_widget 需带 interactive=true。
+-->
+<div id="groot"></div>
+<style>
+#groot{--bd:var(--border-color,#e3e6ea);--bg:var(--bg-primary,#fff);--bg2:var(--bg-secondary,#f2f4f7);--fg:var(--text-primary,#1a1d21);--mu:var(--text-secondary,#5b6470);--pr:var(--primary-color,#3b7ddd);font:13px/1.6 system-ui,-apple-system,"PingFang SC",sans-serif;max-width:720px;margin:0 auto;padding:20px 22px;border:1px solid var(--bd);border-radius:14px;background:var(--bg);color:var(--fg)}
+#groot .hd{display:flex;align-items:center;gap:10px;padding-bottom:13px;border-bottom:1px solid var(--bd);margin-bottom:17px}
+#groot .rd{font-size:15px;font-weight:700}
+#groot .ct,#groot .qn{font-size:11px;padding:2px 8px;border-radius:99px;background:var(--bg2);color:var(--mu)}
+#groot .q{margin-bottom:21px}
+#groot .qt{display:flex;align-items:baseline;gap:8px;font-size:14px;font-weight:600;margin-bottom:5px}
+#groot .qb{color:var(--mu);margin:0 0 9px}
+#groot .o{display:flex;align-items:center;gap:9px;padding:9px 12px;margin-bottom:7px;border:1px solid var(--bd);border-radius:9px;cursor:pointer;user-select:none}
+#groot .o:hover{border-color:var(--pr)}
+#groot .o.on{border-color:var(--pr);background:var(--bg2)}
+#groot .o .t{flex:1}
+#groot .o:before{content:"";flex:none;width:14px;height:14px;border:1.5px solid #c7ccd3;border-radius:50%}
+#groot .o.m:before{border-radius:4px}
+#groot .o.on:before{border-color:var(--pr);background:var(--pr);box-shadow:inset 0 0 0 3px var(--bg)}
+#groot .bt{font-size:11px;font-weight:600;padding:1px 7px;border-radius:99px;background:var(--pr);color:#fff}
+#groot .ip{width:100%;box-sizing:border-box;margin-top:6px;padding:8px 11px;font:inherit;border:1px solid var(--bd);border-radius:9px;background:var(--bg);color:inherit}
+#groot textarea.ip{resize:vertical}
+#groot .rc{font-size:12px;color:var(--mu);margin:6px 0 0}
+#groot .sb{width:100%;margin-top:6px;padding:11px;font-family:inherit;font-size:14px;font-weight:600;border:0;border-radius:10px;background:var(--pr);color:#fff;cursor:pointer}
+#groot .ft{font-size:12px;color:var(--mu);text-align:center;margin:10px 0 0}
+</style>
+<script>
+(function(){
+  /* ===== 只改这里 1/2：本轮轮次 ===== */
+  var ROUND=2;
+  /* ===== 只改这里 2/2：本轮前沿问题数据（1=推荐项，默认选中+徽标）
+     单选/多选: {id,title,body,type:"single"|"multi",options:[["文本",1|0],...]}
+     开放文本:  {id,title,body,type:"text",recommend:"推荐答案(可省)"} */
+  var QUESTIONS=[
+    {id:"Q1",title:"问题标题",body:"问题正文，可多段。",type:"single",options:[["选项 A",1],["选项 B",0]]},
+    {id:"Q2",title:"问题标题",body:"问题正文。可多选。",type:"multi",options:[["选项 A",1],["选项 B",0]]},
+    {id:"Q3",title:"问题标题",body:"问题正文。此题无预设选项，请直接描述。",type:"text",recommend:"推荐答案(可删)"}
+  ];
+  /* ===== 固定引擎，勿改 ===== */
+  var root=document.getElementById("groot");
+  var h='<div class="hd"><span class="rd">第 '+ROUND+' 轮</span><span class="ct">前沿 '+QUESTIONS.length+' 题</span></div>';
+  QUESTIONS.forEach(function(q){
+    h+='<section class="q" data-id="'+q.id+'"><div class="qt"><span class="qn">'+q.id+'</span>'+q.title+'</div><p class="qb">'+q.body+'</p>';
+    if(q.type=="text"){
+      h+='<textarea class="ip" rows="3" placeholder="你的回答…"></textarea>'+(q.recommend?'<p class="rc">推荐：'+q.recommend+'</p>':"");
+    }else{
+      h+=q.options.map(function(o,i){return '<div class="o'+(q.type=="multi"?" m":"")+(o[1]?" on":"")+'" data-i="'+i+'"><span class="t">'+o[0]+'</span>'+(o[1]?'<span class="bt">推荐</span>':"")+'</div>';}).join("")
+        +'<input class="ip other" placeholder="其他（选填，填写后以此为准）">';
+    }
+    h+="</section>";
+  });
+  h+='<button class="sb">提交本轮回答</button><p class="ft">已按推荐项预选，直接提交即等于接受推荐；也可改选或填写「其他」。</p>';
+  root.innerHTML=h;
+  root.querySelectorAll(".q").forEach(function(sec){
+    var q=QUESTIONS.filter(function(x){return x.id==sec.dataset.id})[0];
+    if(q.type=="text")return;
+    var other=sec.querySelector(".other");
+    sec.querySelectorAll(".o").forEach(function(row){
+      row.onclick=function(){ // 整行单击切换：单选=替换，多选=开关
+        if(q.type=="multi"){row.classList.toggle("on");}
+        else{sec.querySelectorAll(".o").forEach(function(r){r.classList.remove("on")});row.classList.add("on");}
+        if(other.value)other.value=""; // 点选项即清空「其他」
+      };
+    });
+    other.oninput=function(){ // 「其他」与选项严格互斥
+      if(this.value.trim())sec.querySelectorAll(".o").forEach(function(r){r.classList.remove("on")});
+    };
+  });
+  root.querySelector(".sb").onclick=function(){ // 以题号为键回传
+    var answers={},parts=[];
+    QUESTIONS.forEach(function(q){
+      var sec=root.querySelector('.q[data-id="'+q.id+'"]');
+      if(q.type=="text"){
+        var v=sec.querySelector("textarea").value.trim();
+        answers[q.id]={text:v};parts.push(q.id+" "+(v||"（未答）"));return;
+      }
+      var custom=sec.querySelector(".other").value.trim();
+      var picked=Array.prototype.map.call(sec.querySelectorAll(".o.on"),function(r){return q.options[+r.dataset.i][0]});
+      var choice=custom?(q.type=="multi"?[]:""):(q.type=="multi"?picked:(picked[0]||"")); // 「其他」优先
+      answers[q.id]={choice:choice,custom:custom,custom_override:!!custom};
+      parts.push(q.id+" "+(custom||picked.join("、")||"（未答）"));
+    });
+    submitData({data:{round:ROUND,answers:answers},display_text:"第 "+ROUND+" 轮回答："+parts.join("；"),action:"grilling_round_answer"});
+  };
+})();
+</script>
